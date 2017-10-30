@@ -2,6 +2,8 @@
 
 namespace Kea\Brixo;
 
+use Kea\Bluegiga\BGWrapper;
+
 class Brixo
 {
     private $deviceList = [];

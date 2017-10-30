@@ -1,10 +1,12 @@
 <?php
 
-namespace Kea\Brixo;
+namespace Kea\Bluegiga;
+
+use Kea\Serial;
 
 class BGWrapper
 {
-    private $ser;
+    private $serial;
     private $ble;
 
     const uuid_service = [0x28, 0x00];  # 0x2800
@@ -12,114 +14,106 @@ class BGWrapper
     /**
      * BGWrapper constructor.
      * @param string $port es. Windows "\.\com4", Mac "/dev/tty.xyk", Linux "/dev/ttySxx"
+     * @throws \RuntimeException
      */
     public function __construct(string $port)
     {
-        $this->ser = fopen($port, 'r+b');
-        fflush($this->ser);
+        $this->serial = new Serial($port);
         $this->ble = new BGLib();
-        $this->ble->packet_mode = false;
-        $this->ble->debug = false;
 
         $this->disconnect(0);
         $this->stopScan();
     }
 
-    private function idle()
+    public function idle(): void
     {
-        $this->ble->check_activity($this->ser);
+        $this->ble->checkActivity($this->serial);
     }
 
-    private function startScan()
+    private function startScan(): void
     {
-        # set scan parameters
-        $this->ble->send_command($this->ser, $this->ble->ble_cmd_gap_set_scan_parameters(0xC8, 0xC8, 1));
-        $this->ble->check_activity($this->ser);
-        # start scanning now
-        $this->ble->send_command($this->ser, $this->ble->ble_cmd_gap_discover(1));
-        $this->ble->check_activity($this->ser);
+        $this->ble->sendCommand($this->serial, $this->ble->ble_cmd_gap_set_scan_parameters(0xC8, 0xC8, 1));
+        $this->ble->sendCommand($this->serial, $this->ble->ble_cmd_gap_discover(1));
+        $this->ble->checkActivity($this->serial);
     }
 
-    private function stopScan()
+    private function stopScan(): void
     {
-        $this->ble->send_command($this->ser, $this->ble->ble_cmd_gap_end_procedure());
-        $this->ble->check_activity($this->ser);
+        $this->ble->sendCommand($this->serial, $this->ble->ble_cmd_gap_end_procedure());
+        $this->ble->checkActivity($this->serial);
     }
 
     public function scan(int $duration, int $stopAfter = 0)
     {
         $results = [];
 
-        $this->ble->ble_evt_gap_scan_response->add(
-            function ($bglib_instance, $args) use (&$results) {
+        $this->ble->getEventHandler()->add(
+            'ble_evt_gap_scan_response',
+            function ($args) use (&$results) {
                 $found = false;
                 foreach ($results as $resp) {
-                    if ($args['sender'] === $resp->sender) {
-                        $resp->rssi = $args['rssi'];
+                    if ($args['sender'] === $resp->getSender()) {
+                        $resp->setRssi($args['rssi']);
                         $found = true;
                     }
                 }
                 if (!$found) {
-                    $results[] = Peripheral($args);
+                    $results[] = new Peripheral($args, $this);
                 }
             }
         );
-        $start_time = \time();
-
+        echo "Scanning...\n";
         $this->startScan();
-        while ((time() - $start_time < $duration) && (($stopAfter !== 0) || (count($results) < $stopAfter))) {
-            $this->ble->check_activity($this->ser);
-        }
+        $this->ble->checkActivity($this->serial, $duration * 1000000);
         $this->stopScan();
-        $this->ble->ble_evt_gap_scan_response -= $this->scan_response_handler;
+        $this->ble->getEventHandler()->remove('ble_evt_gap_scan_response');
 
-        return results;
+        return $results;
     }
 
-    private function connect($scan_result)
+    public function connect(Peripheral $peripheral)
     {
-        #Connects and returns connection handle
-        $sr = $scan_result;
         # Connection intervals have units of 1.25ms
-        $this->ble->send_command(
-            $this->ser,
-            $this->ble->ble_cmd_gap_connect_direct($sr->sender, $sr->atype, 30, 60, 0x100, 0)
+        $this->ble->sendCommand(
+            $this->serial,
+            $this->ble->ble_cmd_gap_connect_direct($peripheral->getSender(), $peripheral->getAType(), 30, 60, 0x100, 0)
         );
-        # Check for the command response
-        $this->ble->check_activity($this->ser);
+
+        $this->ble->checkActivity($this->serial);
         $result = [];
 
-        $this->ble->ble_evt_connection_status->add(
-            function ($bglib_instance, $args) use (&$result) {
+        $this->ble->getEventHandler()->add(
+            'ble_evt_connection_status',
+            function ($args) use (&$result) {
                 if (($args['flags'] & 0x05) === 0x05) {
-                    echo 'Connected to :'.$args['address'];
-                    echo 'Interval: '.($args['conn_interval'] / 1.25).'ms';
+                    echo 'Connected to :'.bin2hex($args['address'])."\n";
+                    echo 'Interval: '.($args['conn_interval'] / 1.25)."ms\n";
                     $result[] = $args['connection'];
                 }
             }
         );
 
         while (count($result) === 0) {
-            $this->ble->check_activity($this->ser);
+            $this->ble->checkActivity($this->serial);
         }
-        $this->ble->ble_evt_connection_status->removeLastCallback();
+        $this->ble->getEventHandler()->remove('ble_evt_connection_status');
 
         return $result[0];
     }
 
-    /*
-        private function discoverServiceGroups($conn)
-        {
-            $this->ble->send_command(
-                $this->ser,
-                $this->ble->ble_cmd_attclient_read_by_group_type($conn, 0x0001, 0xFFFF, list(reversed($uuid_service)))
-            );
-            # Get command response
-            $this->ble->check_activity($this->ser);
-            service_groups = [];
-            finish = [];
-        }
+    public function discoverServiceGroups($conn)
+    {
+        $this->ble->send_command(
+            $this->serial,
+            $this->ble->ble_cmd_attclient_read_by_group_type($conn, 0x0001, 0xFFFF, $uuid_service)
+        );
 
+        $this->ble->check_activity($this->serial);
+        $service_groups = [];
+        $finish = [];
+    }
+
+    /*
         private function found_cb(bglib_instance, args) {
             if args['connection'] == conn:
                 service_groups.append(args);
@@ -162,15 +156,15 @@ class BGWrapper
     }
     */
 
-    private function disconnect($conn)
+    public function disconnect($conn): void
     {
-        $this->ble->send_command($this->ser, $this->ble->ble_cmd_connection_disconnect($conn));
-        $this->ble->check_activity($this->ser);
+        $this->ble->sendCommand($this->serial, $this->ble->ble_cmd_connection_disconnect($conn));
+        //$this->ble->checkActivity($this->serial);
     }
 
-    private function read($conn, $handle)
+    public function read($conn, $handle)
     {
-        $this->ble->send_command($this->ser, $this->ble->ble_cmd_attclient_read_by_handle($conn, $handle));
+        $this->ble->sendCommand($this->serial, $this->ble->ble_cmd_attclient_read_by_handle($conn, $handle));
         $result = [];
         $payload = [];
         $fail = [];
@@ -197,14 +191,16 @@ class BGWrapper
             }
         );
         while (true) {
-            $this->ble->check_activity($this->ser);
+            $this->ble->checkActivity($this->serial);
             if (count($result) && $result[0]) {
                 #There was a read error
                 break;
-            } elseif (count($fail)) {
+            }
+            if (count($fail)) {
                 #Command was processed correctly but we still failed
                 break;
-            } elseif (count($payload)) {
+            }
+            if (count($payload)) {
                 break;
             }
         }
@@ -219,13 +215,13 @@ class BGWrapper
         return $payload[0];
     }
 
-    private function write($conn, $handle, $value)
+    public function write($conn, $handle, $value): void
     {
         if ($handle == 0) {
             print 'Invalid handle! Did you forget a call to Peripheral.replaceCharacteristic(c)?';
         }
-        $this->ble->send_command($this->ser, $this->ble->ble_cmd_attclient_attribute_write($conn, $handle, $value));
-        $this->ble->check_activity($this->ser);
+        $this->ble->sendCommand($this->serial, $this->ble->ble_cmd_attclient_attribute_write($conn, $handle, $value));
+        $this->ble->checkActivity($this->serial);
         $result = [];
 
         $this->ble->ble_rsp_attclient_attribute_write->add(
@@ -250,12 +246,12 @@ class BGWrapper
         $this->ble->ble_evt_attclient_procedure_completed->removeLastCallback();
     }
 
-    private function writecommand($conn, $handle, $value)
+    public function writeCommand($conn, $handle, $value): void
     {
-        if ($handle == 0) {
-            print 'Invalid handle!Did you forget a call to Peripheral.replaceCharacteristic(c) ?';
+        if ($handle === 0) {
+            print 'Invalid handle! Did you forget a call to Peripheral.replaceCharacteristic(c) ?';
         }
-        $this->ble->send_command($this->ser, $this->ble->ble_cmd_attclient_write_command($conn, $handle, $value));
-        $this->ble->check_activity($this->ser);
+        $this->ble->sendCommand($this->serial, $this->ble->ble_cmd_attclient_write_command($conn, $handle, $value));
+        $this->ble->checkActivity($this->serial);
     }
 }
