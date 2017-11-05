@@ -14,25 +14,27 @@ class EventHandler
     public function dispatch(string $eventName, ...$args): void
     {
         if ($this->events->offsetExists($eventName)) {
-            $this->events[$eventName](...$args);
+            foreach ($this->events[$eventName] as $callback)
+                $callback(...$args);
         }
     }
 
     public function add(string $eventName, callable $callable): void
     {
-        if ($this->events->offsetExists($eventName)) {
-            throw new \InvalidArgumentException('Event "'.$eventName.'" already set');
+        if (!$this->events->offsetExists($eventName)) {
+            $this->events[$eventName] = [];
         }
-        $this->events[$eventName] = $callable;
-    }
-
-    public function addOrReplace(string $eventName, callable $callable): void
-    {
-        $this->events[$eventName] = $callable;
+        $this->events[$eventName][] = $callable;
     }
 
     public function remove(string $eventName): void
     {
-        $this->events->offsetUnset($eventName);
+        if (count($this->events[$eventName]) === 1) {
+            $this->events->offsetUnset($eventName);
+
+            return;
+        }
+
+        array_pop($this->events[$eventName]);
     }
 }

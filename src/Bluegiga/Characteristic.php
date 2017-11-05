@@ -2,20 +2,22 @@
 
 namespace Kea\Bluegiga;
 
+use Kea\UUID;
+
 class Characteristic
 {
     private $parent;
     private $handle;
     private $uuid;
     private $byte_value = [];
-    private $notify_cb;
+    private $notifyCallable;
 
     /**
      * @param $parent
      * @param $handle ??? args returned by ble_evt_attclient_find_information_found
      * @param $uuid
      */
-    public function __construct(Peripheral $parent, $handle, $uuid)
+    public function __construct(Peripheral $parent, $handle, UUID $uuid)
     {
         $this->parent = $parent;
         $this->handle = $handle;
@@ -56,15 +58,30 @@ class Characteristic
     {
         $this->byte_value = $new_value;
         $this->unpack();
-        if ($this->notify_cb) {
-            $this->notify_cb($this->handle, $this->byte_value);
+        if (is_callable($this->notifyCallable)) {
+            ($this->notifyCallable)($this->handle, $this->byte_value);
         }
     }
 
-    public function enableNotify($enable, $cb)
+    public function enableNotify($enable, callable $callable)
     {
         $this->parent->enableNotify($this->uuid, $enable);
-        $this->notify_cb = $cb;
+        $this->notifyCallable = $callable;
+    }
+
+    public function getHandle()
+    {
+        return $this->handle;
+    }
+
+    public function getUuid()
+    {
+        return $this->uuid;
+    }
+
+    public function setHandle($handle)
+    {
+        $this->handle = $handle;
     }
 
     public function __toString()

@@ -1,0 +1,23 @@
+{
+    "name": "kea/brixo-php",
+    "description": "This project allows you to communicate with the BRIXO battery, by using a BLED112 dongle.",
+    "type": "project",
+    "autoload": {
+        "psr-4": {
+            "Kea\\": "src/"
+        }
+    },
+    "require": {
+        "php": ">7"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^6.4"
+    },
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Manuel Kea Baldassarri",
+            "email": "mb@ideato.it"
+        }
+    ]
+}

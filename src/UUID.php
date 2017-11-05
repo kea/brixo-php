@@ -6,50 +6,55 @@ class UUID
 {
     private $bytes;
 
-    private function __construct($initializer)
+    private function __construct()
     {
-        if (is_string($initializer)) {
-            $this->bytes = $this->stringToBytes($initializer);
-        } elseif (is_int($initializer)) {
-            $this->bytes = [($initializer >> 8) & 0xFF, ($initializer >> 0) & 0xFF];
-        } elseif (is_array($initializer) && (count($initializer) === 2)) {
-            $this->bytes = $initializer;
-        } else {
+    }
+
+    public static function fromArray(array $bytes): UUID
+    {
+        if (count($bytes) !== 2) {
             throw new \InvalidArgumentException('UUID should be init, string or array');
         }
+        $uuid = new self();
+        $uuid->bytes = $bytes;
+
+        return $uuid;
     }
 
-    private function stringToBytes($arg)
+    public static function fromInt(int $int): UUID
     {
-        $arg = strtoupper($arg);
-        $arg = strtr($arg, ['-' => '']);
+        $uuid = new self();
+        $uuid->bytes = [($int >> 8) & 0xFF, $int & 0xFF];
 
-        return \unpack('H*', $arg);
+        return $uuid;
     }
 
-    private function bytesToString($bytes)
+    public static function fromHexString(string $string): UUID
     {
-        throw new \Exception('Not implemented');
-        /*
-        $l = ["%02X" % $bytes[i] for i in range(len(bytes))]
-        if (count($bytes) == 16){
-            l = ["%02X" % bytes[i] for i in range(16)]
-            l.insert(4, '-')
-            l.insert(7, '-')
-            l.insert(10, '-')
-            l.insert(13, '-')
-        }
-        return ''.join(l)
-        */
+        $uuid = new self();
+        $uuid->bytes = self::hexStringToBytes($string);
+
+        return $uuid;
     }
 
-    private function asString()
+    public static function fromBinary(string $string): UUID
     {
-        return $this->bytesToString($this->bytes);
+        $uuid = new self();
+        $uuid->bytes = [ord($string[1]), ord($string[0])];
+
+        return $uuid;
+    }
+
+    private static function hexStringToBytes(string $arg)
+    {
+        $arg = \strtoupper($arg);
+        $arg = \strtr($arg, ['-' => '']);
+
+        return \array_shift(\unpack('H*', $arg));
     }
 
     public function __toString()
     {
-        return $this->asString();
+        return chr($this->bytes[1]).chr($this->bytes[0]);
     }
 }

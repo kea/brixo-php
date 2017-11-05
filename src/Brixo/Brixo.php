@@ -3,17 +3,35 @@
 namespace Kea\Brixo;
 
 use Kea\Bluegiga\BGWrapper;
+use Kea\Bluegiga\Peripheral;
+use Kea\Serial;
 
 class Brixo
 {
+    /** @var Peripheral[] */
     private $deviceList = [];
     private $bgWrapper;
 
-    public function __construct($port)
+    public function __construct(Serial $serial)
     {
-        $this->bgWrapper = new BGWrapper($port);
+        $this->bgWrapper = new BGWrapper($serial);
     }
 
+    /**
+     * @param string $port es. Windows "\.\com4", Mac "/dev/tty.xyk", Linux "/dev/ttySxx"
+     * @return Brixo
+     */
+    public static function fromPortName(string $port): Brixo
+    {
+        $serial = new Serial($port);
+
+        return new self($serial);
+    }
+
+    /**
+     * @param $timeout
+     * @return Peripheral[]
+     */
     public function scan($timeout)
     {
         $this->deviceList = $this->bgWrapper->scan($timeout);
@@ -21,19 +39,8 @@ class Brixo
         return $this->deviceList;
     }
 
-    public function connect($mac):? BrixoDevice
+    public function connect(Peripheral $peripheral):? BrixoDevice
     {
-        $ble_dev = null;
-        foreach ($this->deviceList as $device) {
-            if ($device->mac_address() === $mac) {
-                $ble_dev = $device;
-                break;
-            }
-        }
-        if ($ble_dev === null) {
-            return null;
-        }
-
-        return new BrixoDevice($ble_dev);
+        return new BrixoDevice($peripheral);
     }
 }

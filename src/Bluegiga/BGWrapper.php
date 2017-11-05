@@ -3,22 +3,21 @@
 namespace Kea\Bluegiga;
 
 use Kea\Serial;
+use Kea\UUID;
 
 class BGWrapper
 {
     private $serial;
     private $ble;
 
-    const uuid_service = [0x28, 0x00];  # 0x2800
+    const uuid_service = [0x28, 0x00];
 
     /**
      * BGWrapper constructor.
-     * @param string $port es. Windows "\.\com4", Mac "/dev/tty.xyk", Linux "/dev/ttySxx"
-     * @throws \RuntimeException
      */
-    public function __construct(string $port)
+    public function __construct(Serial $serial)
     {
-        $this->serial = new Serial($port);
+        $this->serial = $serial;
         $this->ble = new BGLib();
 
         $this->disconnect(0);
@@ -43,6 +42,11 @@ class BGWrapper
         $this->ble->checkActivity($this->serial);
     }
 
+    /**
+     * @param int $duration
+     * @param int $stopAfter
+     * @return Peripheral[]
+     */
     public function scan(int $duration, int $stopAfter = 0)
     {
         $results = [];
@@ -79,14 +83,13 @@ class BGWrapper
             $this->ble->ble_cmd_gap_connect_direct($peripheral->getSender(), $peripheral->getAType(), 30, 60, 0x100, 0)
         );
 
-        $this->ble->checkActivity($this->serial);
         $result = [];
 
         $this->ble->getEventHandler()->add(
             'ble_evt_connection_status',
             function ($args) use (&$result) {
                 if (($args['flags'] & 0x05) === 0x05) {
-                    echo 'Connected to :'.bin2hex($args['address'])."\n";
+                    echo 'Connected to: '.$args['address']->getReadable()."\n";
                     echo 'Interval: '.($args['conn_interval'] / 1.25)."ms\n";
                     $result[] = $args['connection'];
                 }
@@ -101,65 +104,88 @@ class BGWrapper
         return $result[0];
     }
 
-    public function discoverServiceGroups($conn)
+    public function discoverServiceGroups($connection)
     {
-        $this->ble->send_command(
+        $serviceGroups = [];
+        $discoverDone = false;
+        $this->ble->sendCommand(
             $this->serial,
-            $this->ble->ble_cmd_attclient_read_by_group_type($conn, 0x0001, 0xFFFF, $uuid_service)
+            $this->ble->ble_cmd_attclient_read_by_group_type(
+                $connection,
+                0x0001,
+                0xFFFF,
+                UUID::fromArray(self::uuid_service)
+            )
         );
 
-        $this->ble->check_activity($this->serial);
-        $service_groups = [];
-        $finish = [];
+        $this->ble->getEventHandler()->add(
+            'ble_evt_attclient_group_found',
+            function ($args) use ($connection, &$serviceGroups) {
+                if ($args['connection'] === $connection) {
+                    $serviceGroups[] = $args;
+                }
+            }
+        );
+        $this->ble->getEventHandler()->add(
+            'ble_evt_attclient_procedure_completed',
+            function ($args) use ($connection, &$discoverDone) {
+                if ($args['connection'] === $connection) {
+                    $discoverDone = true;
+                }
+            }
+        );
+
+        while (!$discoverDone) {
+            $this->ble->checkActivity($this->serial);
+        }
+
+        $this->ble->getEventHandler()->remove('ble_evt_attclient_group_found');
+        $this->ble->getEventHandler()->remove('ble_evt_attclient_procedure_completed');
+
+        return $serviceGroups;
     }
 
-    /*
-        private function found_cb(bglib_instance, args) {
-            if args['connection'] == conn:
-                service_groups.append(args);
+    public function discoverCharacteristics($connection, $handle_start, $handle_end)
+    {
+        $characteristics = [];
+        $discoverDone = false;
+        $this->ble->sendCommand(
+            $this->serial,
+            $this->ble->ble_cmd_attclient_find_information($connection, $handle_start, $handle_end)
+        );
+        $this->ble->checkActivity($this->serial);
+
+        $this->ble->getEventHandler()->add(
+            'ble_evt_attclient_find_information_found',
+            function ($args) use ($connection, &$characteristics) {
+                if ($args['connection'] === $connection) {
+                    $characteristics[] = $args;
+                }
             }
-    private function finished_cb(bglib_instance, args) {
-        if args['connection'] == conn:
-            finish.append(0)
-            $this->ble->ble_evt_attclient_group_found += found_cb
-            $this->ble->ble_evt_attclient_procedure_completed += finished_cb
-            while not len(finish):
-                $this->ble->check_activity($this->ser)
-            $this->ble->ble_evt_attclient_group_found -= found_cb
-            $this->ble->ble_evt_attclient_procedure_completed -= finished_cb
-            return service_groups;
-    }
-    private function discoverCharacteristics(conn, handle_start, handle_end) {
-        $this->ble->send_command(
-            $this->ser,
-            $this->ble->ble_cmd_attclient_find_information(conn, handle_start, handle_end)
-        )
-            # Get command response
-            $this->ble->check_activity($this->ser)
-            chars = []
-            finish = [];
-    }
-    private function found_cb(bglib_instance, args) {
-        if args['connection'] == conn:
-            chars.append(args);
+        );
+        $this->ble->getEventHandler()->add(
+            'ble_evt_attclient_procedure_completed',
+            function ($args) use ($connection, &$discoverDone) {
+                if ($args['connection'] === $connection) {
+                    $discoverDone = true;
+                }
+            }
+        );
+
+        while (!$discoverDone) {
+            $this->ble->checkActivity($this->serial);
         }
-    private function finished_cb(bglib_instance, args) {
-        if args['connection'] == conn:
-            finish.append(0)
-            $this->ble->ble_evt_attclient_find_information_found += found_cb
-            $this->ble->ble_evt_attclient_procedure_completed += finished_cb
-            while not len(finish):
-                $this->ble->check_activity($this->ser)
-            $this->ble->ble_evt_attclient_find_information_found -= found_cb
-            $this->ble->ble_evt_attclient_procedure_completed -= finished_cb
-            return chars;
+
+        $this->ble->getEventHandler()->remove('ble_evt_attclient_find_information_found');
+        $this->ble->getEventHandler()->remove('ble_evt_attclient_procedure_completed');
+
+        return $characteristics;
     }
-    */
 
     public function disconnect($conn): void
     {
         $this->ble->sendCommand($this->serial, $this->ble->ble_cmd_connection_disconnect($conn));
-        //$this->ble->checkActivity($this->serial);
+        $this->ble->checkActivity($this->serial);
     }
 
     public function read($conn, $handle)
@@ -253,5 +279,13 @@ class BGWrapper
         }
         $this->ble->sendCommand($this->serial, $this->ble->ble_cmd_attclient_write_command($conn, $handle, $value));
         $this->ble->checkActivity($this->serial);
+    }
+
+    public function addEventHandler($eventName, $callback)
+    {
+        $this->ble->getEventHandler()->add(
+            $eventName,
+            $callback
+        );
     }
 }

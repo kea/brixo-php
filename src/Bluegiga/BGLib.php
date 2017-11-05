@@ -2,14 +2,8 @@
 
 namespace Kea\Bluegiga;
 
-// pack
-// H => v
-// h => s
-// B => C
-// b => c
-// I => I
-
 use Kea\Serial;
+use Kea\UUID;
 
 class BGLib
 {
@@ -85,6 +79,20 @@ class BGLib
         return pack('C4C', 0, 1, 3, 0, $connection);
     }
 
+
+    public function ble_cmd_attclient_read_by_group_type($connection, $start, $end, UUID $uuid)
+    {
+        $uuidString = (string)$uuid;
+
+        return "\x00".chr(6 + strlen($uuidString))."\x04\x01".pack(
+                'CvvC',
+                $connection,
+                $start,
+                $end,
+                strlen($uuidString)
+            ).$uuidString;
+    }
+
     public function ble_cmd_gap_connect_direct(
         $address,
         $addr_type,
@@ -103,6 +111,11 @@ class BGLib
             );
     }
 
+    public function ble_cmd_attclient_find_information($connection, $handleStart, $handleEnd)
+    {
+        return pack('C4Cvv', 0, 5, 4, 3, $connection, $handleStart, $handleEnd);
+    }
+
     /**
      * @param Packet $packet
      */
@@ -119,110 +132,9 @@ class BGLib
         }
     }
 
-    /**
-     * @todo TBD
-     * @param Packet $packet
-     */
     private function handlePacketClass0(Packet $packet): void
     {
-        switch ($packet->getCommand()) {
-            case 0:
-                $this->ble_rsp_system_reset([]);
-                $this->busy = false;
-                $this->on_idle();
-                break;
-            case 1:
-                $this->ble_rsp_system_hello([]);
-                break;
-            case 2:
-                $address = unpack(' < 6s', array_slice($packet->getPayload(), 0, 6))[0];
-                $this->ble_rsp_system_address_get(array('address' => $address));
-
-                break;
-            case 3:
-                $result = pyphp_subscript(unpack(' < H', array_slice($packet->getPayload(), 0, 2)), 0);
-                $this->ble_rsp_system_reg_write(array('result' => $result));
-
-                break;
-            case 4:
-                list($address, $value) = unpack(' < HB', array_slice($packet->getPayload(), 0, 3));
-                $this->ble_rsp_system_reg_read(array('address' => $address, 'value' => $value));
-
-                break;
-            case 5:
-                list($txok, $txretry, $rxok, $rxfail, $mbuf) = unpack(
-                    ' < BBBBB',
-                    substr($packet->getPayload(), 5)
-                );
-                $this->ble_rsp_system_get_counters(
-                    array(
-                        'txok' => $txok,
-                        'txretry' => $txretry,
-                        'rxok' => $rxok,
-                        'rxfail' => $rxfail,
-                        'mbuf' => $mbuf,
-                    )
-                );
-
-                break;
-            case 6:
-                $maxconn = $packet->getPayload()[0];
-                $this->ble_rsp_system_get_connections(array('maxconn' => $maxconn));
-
-                break;
-            case 7:
-                list($address, $data_len) = unpack(' < IB', array_slice($packet->getPayload(), 0, 5));
-                $data_data = substr($packet->getPayload(), 5);
-                $this->ble_rsp_system_read_memory(array('address' => $address, 'data' => $data_data));
-
-                break;
-            case 8:
-                list($major, $minor, $patch, $build, $ll_version, $protocol_version, $hw) = unpack(
-                    ' < HHHHHBB',
-                    array_slice($packet->getPayload(), 0, 12)
-                );
-                $this->ble_rsp_system_get_info(
-                    array(
-                        'major' => $major,
-                        'minor' => $minor,
-                        'patch' => $patch,
-                        'build' => $build,
-                        'll_version' => $ll_version,
-                        'protocol_version' => $protocol_version,
-                        'hw' => $hw,
-                    )
-                );
-
-                break;
-            case 9:
-                $result = unpack(' < H', substr($packet->getPayload(), 0, 2))[1];
-                $this->ble_rsp_system_endpoint_tx(array('result' => $result));
-
-                break;
-            case 10:
-                $result = unpack(' < H', substr($packet->getPayload(), 0, 2))[1];
-                $this->ble_rsp_system_whitelist_append(array('result' => $result));
-
-                break;
-            case 11:
-                $result = unpack(' < H', substr($packet->getPayload(), 0, 2))[1];
-                $this->ble_rsp_system_whitelist_remove(array('result' => $result));
-
-                break;
-            case 12:
-                $this->ble_rsp_system_whitelist_clear([]);
-
-                break;
-            case 13:
-                list($result, $data_len) = unpack('vC', substr($packet->getPayload(), 0, 3));
-                $data_data = substr($packet->getPayload(), 3);
-                $this->ble_rsp_system_endpoint_rx(array('result' => $result, 'data' => $data_data));
-
-                break;
-            case 14:
-                $result = unpack('v', substr($packet->getPayload(), 0, 2))[1];
-                $this->ble_rsp_system_endpoint_set_watermarks(array('result' => $result));
-        }
+        throw new \Exception('Class 0 not implemented');
     }
 
     private function handlePacketClass1(Packet $packet): void
@@ -259,52 +171,9 @@ class BGLib
         }
     }
 
-    /**
-     * @todo TBD
-     * @param Packet $packet
-     */
     private function handlePacketClass2(Packet $packet): void
     {
-        if (($packet_command == 0)) {
-            [, $result] = unpack(' < H', substr($packet->getPayload(), 0, 2));
-            $this->ble_rsp_attributes_write(array('result' => $result));
-        } elseif (($packet_command == 1)) {
-            [, $handle, $offset, $result, $value_len] = unpack('HHHB', substr($packet->getPayload(), 0, 7));
-            $value_data = array_map(
-                function ($b) {
-                    return ord($b);
-                },
-                substr($packet->getPayload(), 7)
-            );
-            $this->ble_rsp_attributes_read(
-                array('handle' => $handle, 'offset' => $offset, 'result' => $result, 'value' => $value_data)
-            );
-        } elseif (($packet_command == 2)) {
-            list($handle, $result, $value_len) = unpack(
-                ' < HHB',
-                array_slice(
-                    $packet->getPayload(),
-                    0,
-                    (5 - 0)
-                )
-            );
-            $value_data = array_map(
-                function ($b) {
-                    return ord($b);
-                },
-                array_slice(
-                    $packet->getPayload(),
-                    5
-                )
-            );
-            $this->ble_rsp_attributes_read_type(
-                array('handle' => $handle, 'result' => $result, 'value' => $value_data)
-            );
-        } elseif (($packet_command == 3)) {
-            $this->ble_rsp_attributes_user_read_response([]);
-        } elseif (($packet_command == 4)) {
-            $this->ble_rsp_attributes_user_write_response([]);
-        }
+        throw new \Exception('Class 2 not implemented');
     }
 
     private function handlePacketClass3(Packet $packet): void
@@ -349,54 +218,56 @@ class BGLib
         }
     }
 
-    private function handlePacletClass4(Packet $packet): void
+    private function handlePacketClass4(Packet $packet): void
     {
-        if (($packet_command == 0)) {
-            list($connection, $result) = unpack(' < BH', array_slice($packet->getPayload(), 0, (3 - 0)));
-            $this->ble_rsp_attclient_find_by_type_value(
-                array('connection' => $connection, 'result' => $result)
-            );
-        } elseif (($packet_command == 1)) {
-            list($connection, $result) = unpack(' < BH', array_slice($packet->getPayload(), 0, (3 - 0)));
-            $this->ble_rsp_attclient_read_by_group_type(
-                array('connection' => $connection, 'result' => $result)
-            );
-        } elseif (($packet_command == 2)) {
-            list($connection, $result) = unpack(' < BH', array_slice($packet->getPayload(), 0, (3 - 0)));
-            $this->ble_rsp_attclient_read_by_type(array('connection' => $connection, 'result' => $result));
-        } elseif (($packet_command == 3)) {
-            list($connection, $result) = unpack(' < BH', array_slice($packet->getPayload(), 0, (3 - 0)));
-            $this->ble_rsp_attclient_find_information(
-                array('connection' => $connection, 'result' => $result)
-            );
-        } elseif (($packet_command == 4)) {
-            list($connection, $result) = unpack(' < BH', array_slice($packet->getPayload(), 0, (3 - 0)));
-            $this->ble_rsp_attclient_read_by_handle(
-                array('connection' => $connection, 'result' => $result)
-            );
-        } elseif (($packet_command == 5)) {
-            list($connection, $result) = unpack(' < BH', array_slice($packet->getPayload(), 0, (3 - 0)));
-            $this->ble_rsp_attclient_attribute_write(
-                array('connection' => $connection, 'result' => $result)
-            );
-        } elseif (($packet_command == 6)) {
-            list($connection, $result) = unpack(' < BH', array_slice($packet->getPayload(), 0, (3 - 0)));
-            $this->ble_rsp_attclient_write_command(array('connection' => $connection, 'result' => $result));
-        } elseif (($packet_command == 7)) {
-            $result = pyphp_subscript(unpack(' < H', array_slice($packet->getPayload(), 0, (2 - 0))), 0);
-            $this->ble_rsp_attclient_indicate_confirm(array('result' => $result));
-        } elseif (($packet_command == 8)) {
-            list($connection, $result) = unpack(' < BH', array_slice($packet->getPayload(), 0, (3 - 0)));
-            $this->ble_rsp_attclient_read_long(array('connection' => $connection, 'result' => $result));
-        } elseif (($packet_command == 9)) {
-            list($connection, $result) = unpack(' < BH', array_slice($packet->getPayload(), 0, (3 - 0)));
-            $this->ble_rsp_attclient_prepare_write(array('connection' => $connection, 'result' => $result));
-        } elseif (($packet_command == 10)) {
-            list($connection, $result) = unpack(' < BH', array_slice($packet->getPayload(), 0, (3 - 0)));
-            $this->ble_rsp_attclient_execute_write(array('connection' => $connection, 'result' => $result));
-        } elseif (($packet_command == 11)) {
-            list($connection, $result) = unpack(' < BH', array_slice($packet->getPayload(), 0, (3 - 0)));
-            $this->ble_rsp_attclient_read_multiple(array('connection' => $connection, 'result' => $result));
+        switch ($packet->getCommand()) {
+            case 0:
+                $params = unpack('Cconnection/vresult', substr($packet->getPayload(), 0, 3));
+                $this->eventHandler->dispatch('ble_rsp_attclient_find_by_type_value', $params);
+                break;
+            case 1:
+                $params = unpack('Cconnection/vresult', substr($packet->getPayload(), 0, 3));
+                $this->eventHandler->dispatch('ble_rsp_attclient_read_by_group_type', $params);
+                break;
+            case 2:
+                $params = unpack('Cconnection/vresult', substr($packet->getPayload(), 0, 3));
+                $this->eventHandler->dispatch('ble_rsp_attclient_read_by_type', $params);
+                break;
+            case 3:
+                $params = unpack('Cconnection/vresult', substr($packet->getPayload(), 0, 3));
+                $this->eventHandler->dispatch('ble_rsp_attclient_find_information', $params);
+                break;
+            case 4:
+                $params = unpack('Cconnection/vresult', substr($packet->getPayload(), 0, 3));
+                $this->eventHandler->dispatch('ble_rsp_attclient_read_by_handle', $params);
+                break;
+            case 5:
+                $params = unpack('Cconnection/vresult', substr($packet->getPayload(), 0, 3));
+                $this->eventHandler->dispatch('ble_rsp_attclient_attribute_write', $params);
+                break;
+            case 6:
+                $params = unpack('Cconnection/vresult', substr($packet->getPayload(), 0, 3));
+                $this->eventHandler->dispatch('ble_rsp_attclient_write_command', $params);
+                break;
+            case 7:
+                $params = unpack('vresult', substr($packet->getPayload(), 0, 2));
+                $this->eventHandler->dispatch('ble_rsp_attclient_indicate_confirm', $params);
+                break;
+            case 8:
+                $params = unpack('Cconnection/vresult', substr($packet->getPayload(), 0, 3));
+                $this->eventHandler->dispatch('ble_rsp_attclient_read_long', $params);
+                break;
+            case 9:
+                $params = unpack('Cconnection/vresult', substr($packet->getPayload(), 0, 3));
+                $this->eventHandler->dispatch('ble_rsp_attclient_prepare_write', $params);
+                break;
+            case 10:
+                $params = unpack('Cconnection/vresult', substr($packet->getPayload(), 0, 3));
+                $this->eventHandler->dispatch('ble_rsp_attclient_execute_write', $params);
+                break;
+            case 11:
+                $params = unpack('Cconnection/vresult', substr($packet->getPayload(), 0, 3));
+                $this->eventHandler->dispatch('ble_rsp_attclient_read_multiple', $params);
         }
     }
 
@@ -481,131 +352,12 @@ class BGLib
 
     private function handlePacketClass7(Packet $packet): void
     {
-        if (($packet_command == 0)) {
-            $result = pyphp_subscript(unpack(' < H', array_slice($packet->getPayload(), 0, (2 - 0))), 0);
-            $this->ble_rsp_hardware_io_port_config_irq(array('result' => $result));
-        } elseif (($packet_command == 1)) {
-            $result = pyphp_subscript(unpack(' < H', array_slice($packet->getPayload(), 0, (2 - 0))), 0);
-            $this->ble_rsp_hardware_set_soft_timer(array('result' => $result));
-        } elseif (($packet_command == 2)) {
-            $result = pyphp_subscript(unpack(' < H', array_slice($packet->getPayload(), 0, (2 - 0))), 0);
-            $this->ble_rsp_hardware_adc_read(array('result' => $result));
-        } elseif (($packet_command == 3)) {
-            $result = pyphp_subscript(unpack(' < H', array_slice($packet->getPayload(), 0, (2 - 0))), 0);
-            $this->ble_rsp_hardware_io_port_config_direction(array('result' => $result));
-        } elseif (($packet_command == 4)) {
-            $result = pyphp_subscript(unpack(' < H', array_slice($packet->getPayload(), 0, (2 - 0))), 0);
-            $this->ble_rsp_hardware_io_port_config_function(array('result' => $result));
-        } elseif (($packet_command == 5)) {
-            $result = pyphp_subscript(unpack(' < H', array_slice($packet->getPayload(), 0, (2 - 0))), 0);
-            $this->ble_rsp_hardware_io_port_config_pull(array('result' => $result));
-        } elseif (($packet_command == 6)) {
-            $result = pyphp_subscript(unpack(' < H', array_slice($packet->getPayload(), 0, (2 - 0))), 0);
-            $this->ble_rsp_hardware_io_port_write(array('result' => $result));
-        } elseif (($packet_command == 7)) {
-            list($result, $port, $data) = unpack(' < HBB', array_slice($packet->getPayload(), 0, (4 - 0)));
-            $this->ble_rsp_hardware_io_port_read(
-                array('result' => $result, 'port' => $port, 'data' => $data)
-            );
-        } elseif (($packet_command == 8)) {
-            $result = pyphp_subscript(unpack(' < H', array_slice($packet->getPayload(), 0, (2 - 0))), 0);
-            $this->ble_rsp_hardware_spi_config(array('result' => $result));
-        } elseif (($packet_command == 9)) {
-            list($result, $channel, $data_len) = unpack(
-                ' < HBB',
-                array_slice(
-                    $packet->getPayload(),
-                    0,
-                    (4 - 0)
-                )
-            );
-            $data_data = array_map(
-                function ($b) {
-                    return ord($b);
-                },
-                array_slice(
-                    $packet->getPayload(),
-                    4
-                )
-            );
-            $this->ble_rsp_hardware_spi_transfer(
-                array('result' => $result, 'channel' => $channel, 'data' => $data_data)
-            );
-        } elseif (($packet_command == 10)) {
-            list($result, $data_len) = unpack(' < HB', array_slice($packet->getPayload(), 0, (3 - 0)));
-            $data_data = array_map(
-                function ($b) {
-                    return ord($b);
-                },
-                array_slice(
-                    $packet->getPayload(),
-                    3
-                )
-            );
-            $this->ble_rsp_hardware_i2c_read(array('result' => $result, 'data' => $data_data));
-        } elseif (($packet_command == 11)) {
-            $written = pyphp_subscript(unpack(' < B', array_slice($packet->getPayload(), 0, (1 - 0))), 0);
-            $this->ble_rsp_hardware_i2c_write(array('written' => $written));
-        } elseif (($packet_command == 12)) {
-            $this->ble_rsp_hardware_set_txpower([]);
-        } elseif (($packet_command == 13)) {
-            $result = pyphp_subscript(unpack(' < H', array_slice($packet->getPayload(), 0, (2 - 0))), 0);
-            $this->ble_rsp_hardware_timer_comparator(array('result' => $result));
-        }
+        throw new \Exception('Class 7 not implemented');
     }
 
-    /**
-     * @todo TBD
-     * @param Packet $packet
-     */
     private function handlePacketClass8(Packet $packet): void
     {
-        if (($packet_command == 0)) {
-            $this->ble_rsp_test_phy_tx([]);
-        } elseif (($packet_command == 1)) {
-            $this->ble_rsp_test_phy_rx([]);
-        } elseif (($packet_command == 2)) {
-            $counter = pyphp_subscript(unpack(' < H', array_slice($packet->getPayload(), 0, (2 - 0))), 0);
-            $this->ble_rsp_test_phy_end(array('counter' => $counter));
-        } elseif (($packet_command == 3)) {
-            $this->ble_rsp_test_phy_reset([]);
-        } elseif (($packet_command == 4)) {
-            $channel_map_len = pyphp_subscript(
-                unpack(
-                    ' < B',
-                    array_slice($packet->getPayload(), 0, (1 - 0))
-                ),
-                0
-            );
-            $channel_map_data = array_map(
-                function ($b) {
-                    return ord($b);
-                },
-                array_slice(
-                    $packet->getPayload(),
-                    1
-                )
-            );
-            $this->ble_rsp_test_get_channel_map(array('channel_map' => $channel_map_data));
-        } elseif (($packet_command == 5)) {
-            $output_len = pyphp_subscript(
-                unpack(
-                    ' < B',
-                    array_slice($packet->getPayload(), 0, (1 - 0))
-                ),
-                0
-            );
-            $output_data = array_map(
-                function ($b) {
-                    return ord($b);
-                },
-                array_slice(
-                    $packet->getPayload(),
-                    1
-                )
-            );
-            $this->ble_rsp_test_debug(array('output' => $output_data));
-        }
+        throw new \Exception('Class 8 not implemented');
     }
 
     private function handleEventPacketClass0(Packet $packet): void
@@ -675,10 +427,10 @@ class BGLib
         switch ($packet->getCommand()) {
             case 0:
                 $params = unpack('Cconnection/Cflags', substr($packet->getPayload(), 0, 2));
-                $params['address'] = substr($packet->getPayload(), 2, 6);
+                $params['address'] = new Address(substr($packet->getPayload(), 2, 6));
                 $params += unpack(
                     'Caddress_type/vconn_interval/vtimeout/vlatency/Cbonding',
-                    substr($packet->getPayload(), 0, 16)
+                    substr($packet->getPayload(), 8, 8)
                 );
                 $this->eventHandler->dispatch('ble_evt_connection_status', $params);
                 break;
@@ -702,202 +454,47 @@ class BGLib
         }
     }
 
-    /**
-     * @todo TBD
-     * @param Packet $packet
-     */
     private function handleEventPacketClass4(Packet $packet): void
     {
-        if (($packet_command == 0)) {
-            list($connection, $attrhandle) = unpack(
-                ' < BH',
-                array_slice(
-                    $packet->getPayload(),
-                    0,
-                    (3 - 0)
-                )
-            );
-            $this->ble_evt_attclient_indicated(
-                array('connection' => $connection, 'attrhandle' => $attrhandle)
-            );
-        } elseif (($packet_command == 1)) {
-            list($connection, $result, $chrhandle) = unpack(
-                ' < BHH',
-                array_slice(
-                    $packet->getPayload(),
-                    0,
-                    (5 - 0)
-                )
-            );
-            $this->ble_evt_attclient_procedure_completed(
-                array('connection' => $connection, 'result' => $result, 'chrhandle' => $chrhandle)
-            );
-        } elseif (($packet_command == 2)) {
-            list($connection, $start, $end, $uuid_len) = unpack(
-                ' < BHHB',
-                array_slice(
-                    $packet->getPayload(),
-                    0,
-                    (6 - 0)
-                )
-            );
-            $uuid_data = array_map(
-                function ($b) {
-                    return ord($b);
-                },
-                array_slice(
-                    $packet->getPayload(),
-                    6
-                )
-            );
-            $this->ble_evt_attclient_group_found(
-                array('connection' => $connection, 'start' => $start, 'end' => $end, 'uuid' => $uuid_data)
-            );
-        } elseif (($packet_command == 3)) {
-            list($connection, $chrdecl, $value, $properties, $uuid_len) = unpack(
-                ' < BHHBB',
-                array_slice(
-                    $packet->getPayload(),
-                    0,
-                    (7 - 0)
-                )
-            );
-            $uuid_data = array_map(
-                function ($b) {
-                    return ord($b);
-                },
-                array_slice(
-                    $packet->getPayload(),
-                    7
-                )
-            );
-            $this->ble_evt_attclient_attribute_found(
-                array(
-                    'connection' => $connection,
-                    'chrdecl' => $chrdecl,
-                    'value' => $value,
-                    'properties' => $properties,
-                    'uuid' => $uuid_data,
-                )
-            );
-        } elseif (($packet_command == 4)) {
-            list($connection, $chrhandle, $uuid_len) = unpack(
-                ' < BHB',
-                array_slice(
-                    $packet->getPayload(),
-                    0,
-                    (4 - 0)
-                )
-            );
-            $uuid_data = array_map(
-                function ($b) {
-                    return ord($b);
-                },
-                array_slice(
-                    $packet->getPayload(),
-                    4
-                )
-            );
-            $this->ble_evt_attclient_find_information_found(
-                array('connection' => $connection, 'chrhandle' => $chrhandle, 'uuid' => $uuid_data)
-            );
-        } elseif (($packet_command == 5)) {
-            list($connection, $atthandle, $type, $value_len) = unpack(
-                ' < BHBB',
-                array_slice(
-                    $packet->getPayload(),
-                    0,
-                    (5 - 0)
-                )
-            );
-            $value_data = array_map(
-                function ($b) {
-                    return ord($b);
-                },
-                array_slice(
-                    $packet->getPayload(),
-                    5
-                )
-            );
-            $this->ble_evt_attclient_attribute_value(
-                array(
-                    'connection' => $connection,
-                    'atthandle' => $atthandle,
-                    'type' => $type,
-                    'value' => $value_data,
-                )
-            );
-        } elseif (($packet_command == 6)) {
-            list($connection, $handles_len) = unpack(
-                ' < BB',
-                array_slice(
-                    $packet->getPayload(),
-                    0,
-                    (2 - 0)
-                )
-            );
-            $handles_data = array_map(
-                function ($b) {
-                    return ord($b);
-                },
-                array_slice(
-                    $packet->getPayload(),
-                    2
-                )
-            );
-            $this->ble_evt_attclient_read_multiple_response(
-                array('connection' => $connection, 'handles' => $handles_data)
-            );
+        switch ($packet->getCommand()) {
+            case 0:
+                $params = unpack('Cconnection/vattrhandle', substr($packet->getPayload(), 0, 3));
+                $this->eventHandler->dispatch('ble_evt_attclient_indicated', $params);
+                break;
+            case 1:
+                $params = unpack('Cconnection/vresult/vchrhandle', substr($packet->getPayload(), 0, 5));
+                $this->eventHandler->dispatch('ble_evt_attclient_procedure_completed', $params);
+                break;
+            case 2:
+                $params = unpack('Cconnection/vstart/vend/Cuuid_len', substr($packet->getPayload(), 0, 6));
+                $params['uuid'] = substr($packet->getPayload(), 6);
+                $this->eventHandler->dispatch('ble_evt_attclient_group_found', $params);
+                break;
+            case 3:
+                $params = unpack('Cconnection/vchrdecl/vvalue/Cproperties/Cuuid_len', substr($packet->getPayload(), 0, 7));
+                $params['uuid'] = substr($packet->getPayload(), 7);
+                $this->eventHandler->dispatch('ble_evt_attclient_attribute_found', $params);
+                break;
+            case 4:
+                $params = unpack('Cconnection/vchrhandle/Cuuid_len', substr($packet->getPayload(), 0, 4));
+                $params['uuid'] = substr($packet->getPayload(), 4);
+                $this->eventHandler->dispatch('ble_evt_attclient_find_information_found', $params);
+                break;
+            case 5:
+                $params = unpack('Cconnection/vatthandle/Ctype/Cvalue_len', substr($packet->getPayload(), 0, 5));
+                $params['value'] = substr($packet->getPayload(), 5);
+                $this->eventHandler->dispatch('ble_evt_attclient_attribute_value', $params);
+                break;
+            case 6:
+                $params = unpack('Cconnection/Chandles_len', substr($packet->getPayload(), 0, 2));
+                $params['handles'] = substr($packet->getPayload(), 2);
+                $this->eventHandler->dispatch('ble_evt_attclient_read_multiple_response', $params);
         }
     }
 
-    /**
-     * @todo TBD
-     * @param Packet $packet
-     */
     private function handleEventPacketClass5(Packet $packet): void
     {
-        if (($packet_command == 0)) {
-            list($handle, $packet, $data_len) = unpack(
-                ' < BBB',
-                array_slice(
-                    $packet->getPayload(),
-                    0,
-                    (3 - 0)
-                )
-            );
-            $data_data = array_map(
-                function ($b) {
-                    return ord($b);
-                },
-                array_slice(
-                    $packet->getPayload(),
-                    3
-                )
-            );
-            $this->ble_evt_sm_smp_data(array('handle' => $handle, 'packet' => $packet, 'data' => $data_data));
-        } elseif (($packet_command == 1)) {
-            list($handle, $result) = unpack(' < BH', array_slice($packet->getPayload(), 0, (3 - 0)));
-            $this->ble_evt_sm_bonding_fail(array('handle' => $handle, 'result' => $result));
-        } elseif (($packet_command == 2)) {
-            list($handle, $passkey) = unpack(' < BI', array_slice($packet->getPayload(), 0, (5 - 0)));
-            $this->ble_evt_sm_passkey_display(array('handle' => $handle, 'passkey' => $passkey));
-        } elseif (($packet_command == 3)) {
-            $handle = pyphp_subscript(unpack(' < B', array_slice($packet->getPayload(), 0, (1 - 0))), 0);
-            $this->ble_evt_sm_passkey_request(array('handle' => $handle));
-        } elseif (($packet_command == 4)) {
-            list($bond, $keysize, $mitm, $keys) = unpack(
-                ' < BBBB',
-                array_slice(
-                    $packet->getPayload(),
-                    0,
-                    (4 - 0)
-                )
-            );
-            $this->ble_evt_sm_bond_status(
-                array('bond' => $bond, 'keysize' => $keysize, 'mitm' => $mitm, 'keys' => $keys)
-            );
-        }
+        throw new \Exception('Class event 5 not implemented');
     }
 
     private function handleEventPacketClass6(Packet $packet): void

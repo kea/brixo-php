@@ -2,18 +2,21 @@
 
 namespace Kea\Brixo;
 
+use Kea\Bluegiga\Peripheral;
+use Kea\UUID;
+
 class BrixoDevice
 {
     private $bleDevice;
     private $channel = 0;
     private $power = 100;
 
-    public function __construct(BLEDevice $bleDevice)
+    public function __construct(Peripheral $bleDevice)
     {
         $this->bleDevice = $bleDevice;
         $bleDevice->connect();
         $bleDevice->discover();
-        $bleDevice->enableNotifyForUUID(UUID(0x2B10));
+        $bleDevice->enableNotifyForUUID(UUID::fromInt(0x2B10));
         $status = $this->getStatus();
         if ($status->getCW()) {
             $this->channel = 1;

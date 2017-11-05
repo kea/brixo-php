@@ -28,11 +28,7 @@ class Serial
 
     private function read()
     {
-        usleep(500000);
-        $read = \fread($this->handle, 1500);
-        echo 'Read: '.bin2hex($read)."\n";
-
-        return $read;
+        return \fread($this->handle, 1500);
     }
 
     /**
@@ -42,17 +38,24 @@ class Serial
      */
     public function blockingRead(int $timeout)
     {
+        $start = microtime(true);
         fflush($this->handle);
+        usleep(10000);
         $null = [];
-        $read = [$this->handle];
-        if (false === ($ready = \stream_select($read, $null, $null, 0, $timeout))) {
-            throw new \RuntimeException('something went wrong reading stream');
-        }
-        if ($ready > 0) {
-            return $this->read();
-        }
+        $readStreams = [$this->handle];
+        $read = '';
+        $timeLeft = $timeout;
+        do {
+            if (false === ($ready = \stream_select($readStreams, $null, $null, 0, $timeLeft))) {
+                throw new \RuntimeException('something went wrong reading stream');
+            }
+            if ($ready > 0) {
+                $read .= $this->read();
+            }
+            $timeLeft = (int)($timeout - ((microtime(true) - $start) * 10**6));
+        } while ($timeLeft > 0);
 
-        return false;
+        return $read === '' ? false : $read;
     }
 
     /**
