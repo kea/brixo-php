@@ -196,21 +196,21 @@ class BGWrapper
         $fail = [];
 
         $this->ble->ble_rsp_attclient_read_by_handle->add(
-            function ($bglib_instance, $args) use (&$result, $conn) {
+            function ($args) use (&$result, $conn) {
                 if ($args['connection'] == $conn) {
                     $result[] = $args['result'];
                 }
             }
         );
         $this->ble->ble_evt_attclient_attribute_value->add(
-            function ($bglib_instance, $args) use (&$payload, $conn) {
+            function ($args) use (&$payload, $conn) {
                 if ($args['connection'] == $conn) {
                     $payload[] = $args['value'];
                 }
             }
         );
         $this->ble->ble_evt_attclient_procedure_completed->add(
-            function ($bglib_instance, $args) use (&$fail, $conn) {
+            function ($args) use (&$fail, $conn) {
                 if ($args['connection'] == $conn) {
                     $fail[] = 0;
                 }
@@ -241,25 +241,26 @@ class BGWrapper
         return $payload[0];
     }
 
-    public function write($conn, $handle, $value): void
+    public function write($connection, $handle, $value): void
     {
         if ($handle == 0) {
             print 'Invalid handle! Did you forget a call to Peripheral.replaceCharacteristic(c)?';
         }
-        $this->ble->sendCommand($this->serial, $this->ble->ble_cmd_attclient_attribute_write($conn, $handle, $value));
-        $this->ble->checkActivity($this->serial);
+        $this->ble->sendCommand($this->serial, $this->ble->ble_cmd_attclient_attribute_write($connection, $handle, $value));
         $result = [];
 
-        $this->ble->ble_rsp_attclient_attribute_write->add(
-            function ($bglib_instance, $args) use (&$result, $conn) {
-                if ($args['connection'] == $conn) {
+        $this->ble->getEventHandler()->add(
+            'ble_rsp_attclient_attribute_write',
+            function ($args) use (&$result, $connection) {
+                if ($args['connection'] == $connection) {
                     $result[] = null;
                 }
             }
         );
-        $this->ble->ble_evt_attclient_procedure_completed->add(
-            function ($bglib_instance, $args) use (&$result, $conn) {
-                if ($args['connection'] == $conn) {
+        $this->ble->getEventHandler()->add(
+            'ble_evt_attclient_procedure_completed',
+            function ($args) use (&$result, $connection) {
+                if ($args['connection'] == $connection) {
                     $result[] = null;
                 }
             }
@@ -268,8 +269,8 @@ class BGWrapper
         while (count($result) < 2) {
             $this->idle();
         }
-        $this->ble->ble_rsp_attclient_attribute_write->removeLastCallback();
-        $this->ble->ble_evt_attclient_procedure_completed->removeLastCallback();
+        $this->ble->getEventHandler()->remove('ble_rsp_attclient_attribute_write');
+        $this->ble->getEventHandler()->remove('ble_evt_attclient_procedure_completed');
     }
 
     public function writeCommand($conn, $handle, $value): void

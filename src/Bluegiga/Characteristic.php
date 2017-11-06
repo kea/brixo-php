@@ -9,7 +9,7 @@ class Characteristic
     private $parent;
     private $handle;
     private $uuid;
-    private $byte_value = [];
+    private $byteValue = [];
     private $notifyCallable;
 
     /**
@@ -24,46 +24,25 @@ class Characteristic
         $this->uuid = $uuid;
     }
 
-    /**
-     * Subclasses should override this to serialize any instance members
-     * that need to go in to $this->byte_value
-     */
-    public function pack()
-    {
-        $this->parent->pack();
-    }
-
-    /**
-     * Subclasses should override this to unserialize any instance members
-     * from $this->byte_value
-     */
-    public function unpack()
-    {
-        return $this->parent->unpack();
-    }
-
     public function write()
     {
-        $this->pack();
-        $this->parent->writeByHandle($this->handle, $this->byte_value);
+        $this->parent->writeByHandle($this->handle, $this->byteValue);
     }
 
     public function read()
     {
-        $this->byte_value = $this->parent->readByHandle($this->handle);
-        $this->unpack();
+        $this->byteValue = $this->parent->readByHandle($this->handle);
     }
 
-    public function onNotify($new_value)
+    public function onNotify($newValue)
     {
-        $this->byte_value = $new_value;
-        $this->unpack();
+        $this->byteValue = $newValue;
         if (is_callable($this->notifyCallable)) {
-            ($this->notifyCallable)($this->handle, $this->byte_value);
+            call_user_func($this->notifyCallable, $this->handle, $this->byteValue);
         }
     }
 
-    public function enableNotify($enable, callable $callable)
+    public function enableNotify(bool $enable, callable $callable)
     {
         $this->parent->enableNotify($this->uuid, $enable);
         $this->notifyCallable = $callable;

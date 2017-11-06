@@ -16,6 +16,7 @@ class Peripheral
      */
     private $BGWrapper;
     private $adServices;
+    private $notifyHandlerBuffer;
 
     public function __construct($args, BGWrapper $BGWrapper)
     {
@@ -140,7 +141,7 @@ class Peripheral
         return $this->writeByHandle($this->findHandleForUUID($uuid), $payload);
     }
 
-    private function writecommand($uuid, $payload)
+    public function writecommand($uuid, $payload)
     {
         return $this->writecommandByHandle($this->findHandleForUUID($uuid), $payload);
     }
@@ -172,7 +173,7 @@ class Peripheral
             }
             $test_handle++;
         }
-        $payload = [$enable ? 1 : 0, 0];
+        $payload = ($enable ? "\x01" : "\x00") . "\x00";
 
         return $this->writeByHandle($test_handle, $payload);
 
@@ -180,23 +181,23 @@ class Peripheral
 
     public function enableNotifyForUUID($uuid)
     {
-        $this->characteristics[$this->findHandleForUUID($uuid)]->enableNotify(true, $this->notifyHandler);
+        $this->characteristics[$this->findHandleForUUID($uuid)]->enableNotify(true, [$this, 'notifyHandler']);
     }
 
-    private function notifyHandler($handle, $byte_value)
+    public function notifyHandler($handle, $byteValue)
     {
-        $this->readString[$handle] = $byte_value;
+        $this->notifyHandlerBuffer[$handle] = $byteValue;
     }
 
-    private function readNotifyValue($uuid)
+    public function readNotifyValue($uuid)
     {
         $handle = $this->findHandleForUUID($uuid);
         $this->BGWrapper->idle();
-        while (!empty($this->readString[$handle])) {
+        while (empty($this->notifyHandlerBuffer[$handle])) {
             $this->BGWrapper->idle();
         }
 
-        return $this->readString[$handle];
+        return $this->notifyHandlerBuffer[$handle];
     }
 
     /**

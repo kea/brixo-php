@@ -113,11 +113,11 @@ class BrixoDevice
 
     private function readBatteryInfo(): string
     {
-        return $this->bleDevice->readNotifyValue(UUID(0x2B10));
+        return $this->bleDevice->readNotifyValue(UUID::fromInt(0x2B10));
     }
 
     private function writeCommand(string $command): void
     {
-        $this->bleDevice->writecommand(UUID(0x2B11), $command);
+        $this->bleDevice->writecommand(UUID::fromInt(0x2B11), $command);
     }
 }

@@ -79,6 +79,20 @@ class BGLib
         return pack('C4C', 0, 1, 3, 0, $connection);
     }
 
+    public function ble_cmd_attclient_attribute_write($connection, $attHandle, string $data)
+    {
+        return pack(
+                'C4CvC',
+                0,
+                4 + strlen($data),
+                4,
+                5,
+                $connection,
+                $attHandle,
+                strlen($data)
+            ).$data;
+
+    }
 
     public function ble_cmd_attclient_read_by_group_type($connection, $start, $end, UUID $uuid)
     {
@@ -471,7 +485,10 @@ class BGLib
                 $this->eventHandler->dispatch('ble_evt_attclient_group_found', $params);
                 break;
             case 3:
-                $params = unpack('Cconnection/vchrdecl/vvalue/Cproperties/Cuuid_len', substr($packet->getPayload(), 0, 7));
+                $params = unpack(
+                    'Cconnection/vchrdecl/vvalue/Cproperties/Cuuid_len',
+                    substr($packet->getPayload(), 0, 7)
+                );
                 $params['uuid'] = substr($packet->getPayload(), 7);
                 $this->eventHandler->dispatch('ble_evt_attclient_attribute_found', $params);
                 break;
