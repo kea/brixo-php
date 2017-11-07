@@ -4,8 +4,48 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
         "This file is @generated automatically"
     ],
-    "content-hash": "25a668ba2b26f830aa12420e6248ebbf",
-    "packages": [],
+    "content-hash": "1ea3af3ced70df7978585d90a9f207d1",
+    "packages": [
+        {
+            "name": "kea/bglib-php",
+            "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/kea/bglib-php.git",
+                "reference": "fcbc5008a533d981c9f04d98aa85a2849e537083"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/kea/bglib-php/zipball/fcbc5008a533d981c9f04d98aa85a2849e537083",
+                "reference": "fcbc5008a533d981c9f04d98aa85a2849e537083",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">7"
+            },
+            "require-dev": {
+                "phpunit/phpunit": "^6.4"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Kea\\Bluegiga\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Manuel Kea Baldassarri",
+                    "email": "mb@ideato.it"
+                }
+            ],
+            "description": "BGLib PHP implemetation",
+            "time": "2017-11-07T22:16:43+00:00"
+        }
+    ],
     "packages-dev": [
         {
             "name": "doctrine/instantiator",
@@ -1462,7 +1502,9 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {
+        "kea/bglib-php": 20
+    },
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
