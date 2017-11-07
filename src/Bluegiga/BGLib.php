@@ -2,9 +2,6 @@
 
 namespace Kea\Bluegiga;
 
-use Kea\Serial;
-use Kea\UUID;
-
 class BGLib
 {
     private $debug = false;

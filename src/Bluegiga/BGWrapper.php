@@ -2,9 +2,6 @@
 
 namespace Kea\Bluegiga;
 
-use Kea\Serial;
-use Kea\UUID;
-
 class BGWrapper
 {
     private $serial;

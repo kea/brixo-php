@@ -3,8 +3,8 @@
 namespace Test\Kea\Brixo;
 
 use Kea\Bluegiga\Peripheral;
+use Kea\Bluegiga\Serial;
 use Kea\Brixo\Brixo;
-use Kea\Serial;
 use PHPUnit\Framework\TestCase;
 
 class BrixoTest extends TestCase

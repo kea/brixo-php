@@ -1,6 +1,6 @@
 <?php
 
-namespace Kea;
+namespace Kea\Bluegiga;
 
 class UUID
 {

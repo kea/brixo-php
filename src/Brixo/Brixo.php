@@ -4,7 +4,7 @@ namespace Kea\Brixo;
 
 use Kea\Bluegiga\BGWrapper;
 use Kea\Bluegiga\Peripheral;
-use Kea\Serial;
+use Kea\Bluegiga\Serial;
 
 class Brixo
 {

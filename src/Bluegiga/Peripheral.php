@@ -2,8 +2,6 @@
 
 namespace Kea\Bluegiga;
 
-use Kea\UUID;
-
 class Peripheral
 {
     const UUID_LENGTH = ["\x02" => 2, "\x03" => 2, "\x04" => 4, "\x05" => 4, "\x06" => 16, "\x07" => 16];

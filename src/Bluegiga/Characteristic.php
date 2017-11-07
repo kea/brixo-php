@@ -2,8 +2,6 @@
 
 namespace Kea\Bluegiga;
 
-use Kea\UUID;
-
 class Characteristic
 {
     private $parent;

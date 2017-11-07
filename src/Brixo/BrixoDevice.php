@@ -3,7 +3,7 @@
 namespace Kea\Brixo;
 
 use Kea\Bluegiga\Peripheral;
-use Kea\UUID;
+use Kea\Bluegiga\UUID;
 
 class BrixoDevice
 {
