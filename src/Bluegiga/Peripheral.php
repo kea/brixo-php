@@ -6,6 +6,7 @@ use Kea\UUID;
 
 class Peripheral
 {
+    const UUID_LENGTH = ["\x02" => 2, "\x03" => 2, "\x04" => 4, "\x05" => 4, "\x06" => 16, "\x07" => 16];
     private $sender;
     private $rssi;
     private $atype;
@@ -17,6 +18,8 @@ class Peripheral
     private $BGWrapper;
     private $adServices;
     private $notifyHandlerBuffer;
+    private $debug = false;
+    private $connectionInterval;
 
     public function __construct($args, BGWrapper $BGWrapper)
     {
@@ -25,32 +28,22 @@ class Peripheral
         $this->atype = $args['address_type'];
         $this->connection = -1;
         $adServices = [];
-        $field = [];
+        $field = '';
         $bytesLeft = 0;
         $this->BGWrapper = $BGWrapper;
 
         for ($j = 0, $jMax = strlen($args['data']); $j < $jMax; $j++) {
             if ($bytesLeft === 0) {
                 $bytesLeft = \ord($args['data'][$j]);
-                $field = [];
+                $field = '';
             } else {
-                $field[] = $args['data'][$j];
+                $field .= $args['data'][$j];
                 $bytesLeft--;
-                if ($bytesLeft === 0) {
-                    if (($field[0] === 0x02) || ($field[0] === 0x03)) {
-                        for ($i = 0; $i < (\strlen($field) - 1) / 2; $i++) {
-                            $adServices[] = UUID::fromBinary(\substr($field, $i * 2 + 1, 2));
-                        }
-                    }
-                    if (($field[0] === 0x04) || ($field[0] === 0x05)) {
-                        for ($i = 0; $i < (\strlen($field) - 1) / 4; $i++) {
-                            $adServices[] = UUID::fromBinary(\substr($field, $i * 4 + 1, 4));
-                        }
-                    }
-                    if (($field[0] === 0x06) || ($field[0] === 0x07)) {
-                        for ($i = 0; $i < (\strlen($field) - 1) / 16; $i++) {
-                            $adServices[] = UUID::fromBinary(\substr($field, $i * 16 + 1, 2));
-                        }
+                if (($bytesLeft === 0) && (isset(self::UUID_LENGTH[$field[0]]))) {
+                    $uuidLength = self::UUID_LENGTH[$field[0]];
+                    $uuidCount = (\strlen($field) - 1) / $uuidLength;
+                    for ($i = 0; $i < $uuidCount; $i++) {
+                        $adServices[] = UUID::fromBinary(\substr($field, $i * $uuidLength + 1, $uuidLength));
                     }
                 }
             }
@@ -71,9 +64,20 @@ class Peripheral
         );
     }
 
-    public function connect()
+    public function __toString()
     {
-        $this->connection = $this->BGWrapper->connect($this);
+        $s = $this->macAddress();
+        $s .= sprintf("\t%d", $this->rssi);
+        if (!empty($this->adServices)) {
+            $s .= "\n".implode("\t", $this->adServices);
+        }
+
+        return $s;
+    }
+
+    public function connect(): bool
+    {
+        return $this->BGWrapper->connect($this);
     }
 
     public function disconnect()
@@ -83,13 +87,13 @@ class Peripheral
 
     public function discover()
     {
-        echo "Service Groups: \n";
+        $this->log("Service Groups: \n");
         $groups = $this->BGWrapper->discoverServiceGroups($this->connection);
         foreach ($groups as $group) {
-            echo "SG: ".bin2hex($group['uuid'])."\n";
+            $this->log("SG: ".bin2hex(strrev($group['uuid']))."\n");
             $group = $this->BGWrapper->discoverCharacteristics($this->connection, $group['start'], $group['end']);
             foreach ($group as $i => $c) {
-                echo "C $i:".bin2hex($c['uuid'])."\n";
+                $this->log("C $i H {$c['chrhandle']}:".bin2hex(strrev($c['uuid']))."\n");
                 $characteristic = new Characteristic($this, $c['chrhandle'], UUID::fromBinary($c['uuid']));
                 $this->characteristics[$characteristic->getHandle()] = $characteristic;
             }
@@ -110,40 +114,40 @@ class Peripheral
             }
         }
         if (count($rval) !== 1) {
-            throw new \Exception("Failed to get Handle");
+            throw new \Exception("Failed to get Handle for ".bin2hex(strrev($uuid)));
         }
 
         return $rval[0];
     }
 
-    private function readByHandle($char_handle)
+    public function readByHandle($charHandle)
     {
-        return $this->BGWrapper->read($this->connection, $char_handle);
+        return $this->BGWrapper->read($this->connection, $charHandle);
     }
 
-    private function writeByHandle($char_handle, $payload)
+    public function writeByHandle($charHandle, $payload)
     {
-        return $this->BGWrapper->write($this->connection, $char_handle, $payload);
+        $this->BGWrapper->write($this->connection, $charHandle, $payload);
     }
 
-    private function writecommandByHandle($char_handle, $payload)
+    private function writecommandByHandle($charHandle, $payload)
     {
-        return $this->BGWrapper->writeCommand($this->connection, $char_handle, $payload);
+        $this->BGWrapper->writeCommand($this->connection, $charHandle, $payload);
     }
 
-    private function read($uuid)
+    public function read(UUID $uuid)
     {
         return $this->readByHandle($this->findHandleForUUID($uuid));
     }
 
-    private function write($uuid, $payload)
+    private function write(UUID $uuid, $payload)
     {
-        return $this->writeByHandle($this->findHandleForUUID($uuid), $payload);
+        $this->writeByHandle($this->findHandleForUUID($uuid), $payload);
     }
 
-    public function writecommand($uuid, $payload)
+    public function writeCommand(UUID $uuid, $payload)
     {
-        return $this->writecommandByHandle($this->findHandleForUUID($uuid), $payload);
+        $this->writecommandByHandle($this->findHandleForUUID($uuid), $payload);
     }
 
     /**
@@ -159,23 +163,23 @@ class Peripheral
      */
     public function enableNotify($uuid, $enable)
     {
-        $notify_uuid = UUID::fromInt(0x2902);
-        $base_handle = $this->findHandleForUUID($uuid);
-        $test_handle = $base_handle + 1;
+        $notifyUuid = UUID::fromInt(0x2902);
+        $baseHandle = $this->findHandleForUUID($uuid);
+        $testHandle = $baseHandle + 1;
         while (true) {
-            if ($test_handle - $base_handle > 3) {
+            if ($testHandle - $baseHandle > 3) {
                 throw new \RuntimeException(
                     "Trying to enable notification for a characteristic that doesn't allow it!"
                 );
             }
-            if ($this->characteristics[$test_handle]->getUUID() == $notify_uuid) {
+            if ($this->characteristics[$testHandle]->getUUID() == $notifyUuid) {
                 break;
             }
-            $test_handle++;
+            $testHandle++;
         }
         $payload = ($enable ? "\x01" : "\x00") . "\x00";
 
-        return $this->writeByHandle($test_handle, $payload);
+        return $this->writeByHandle($testHandle, $payload);
 
     }
 
@@ -200,14 +204,11 @@ class Peripheral
         return $this->notifyHandlerBuffer[$handle];
     }
 
-    /**
-     * Provides a means to register subclasses of Characteristic with the Peripheral
-     * @param $newChar Characteristic instance of Characteristic or subclass with UUID set.  Handle does not need to be set
-     */
-    private function replaceCharacteristic(Characteristic $newChar)
+    private function log(string $message)
     {
-        $newChar->setHandle($this->findHandleForUUID($newChar->getUuid()));
-        $this->characteristics[$newChar->getHandle()] = $newChar;
+        if ($this->debug) {
+            echo $message;
+        }
     }
 
     public function getSender()
@@ -220,11 +221,6 @@ class Peripheral
         return implode(':', str_split(bin2hex(strrev($this->sender)), 2));
     }
 
-    public function setRssi($rssi)
-    {
-        $this->rssi = $rssi;
-    }
-
     public function getRssi()
     {
         return $this->rssi;
@@ -235,14 +231,29 @@ class Peripheral
         return $this->atype;
     }
 
-    public function __toString()
+    public function getName()
     {
-        $s = $this->macAddress();
-        $s .= sprintf("\t%d", $this->rssi);
-        if (!empty($this->adServices)) {
-            $s .= "\n".implode("\t", $this->adServices);
-        }
-
-        return $s;
+        return $this->readByHandle($this->findHandleForUUID(UUID::fromInt(0x2A00)));
     }
+
+    public function getConnectionInterval()
+    {
+        return $this->connectionInterval;
+    }
+
+    public function setRssi($rssi)
+    {
+        $this->rssi = $rssi;
+    }
+
+    public function setConnection($connection)
+    {
+        $this->connection = $connection;
+    }
+
+    public function setInterval(int $connectionInterval)
+    {
+        $this->connectionInterval = $connectionInterval;
+    }
+
 }

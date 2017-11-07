@@ -16,7 +16,12 @@ class BrixoDevice
         $this->bleDevice = $bleDevice;
         $bleDevice->connect();
         $bleDevice->discover();
-        $bleDevice->enableNotifyForUUID(UUID::fromInt(0x2B10));
+        try {
+            $bleDevice->enableNotifyForUUID(UUID::fromInt(0x2B10));
+        } catch (\Exception $e) {
+            echo "It seems that the device '".$bleDevice->getName()."' is not a Brixo battery\n";
+            exit(1);
+        }
         $status = $this->getStatus();
         if ($status->getCW()) {
             $this->channel = 1;
@@ -62,7 +67,7 @@ class BrixoDevice
         } elseif ($pwmRatio > 100) {
             $this->power = 100;
         }
-        $command .= $this->power;
+        $command .= chr($this->power);
         $command .= "\r\n";
         $this->writeCommand($command);
     }
@@ -79,7 +84,7 @@ class BrixoDevice
     {
         $command = "\x61\x70\x70";
         $command .= $beep ? "\x78" : "\xF8";
-        $command .= chr($cutOutTime / 256);
+        $command .= chr(floor($cutOutTime / 256));
         $command .= chr($cutOutTime % 256);
         $command .= "\r\n";
         $this->writeCommand($command);
@@ -87,7 +92,7 @@ class BrixoDevice
 
     public function getStatus(): BrixoStatus
     {
-        return BrixoStatus::fromChar($this->readBatteryInfo());
+        return BrixoStatus::fromChar($this->readBatteryInfo()[1]);
     }
 
     public function getOutputCurrent(): int
@@ -116,8 +121,30 @@ class BrixoDevice
         return $this->bleDevice->readNotifyValue(UUID::fromInt(0x2B10));
     }
 
+    public function getName(): string
+    {
+        return $this->bleDevice->getName();
+    }
+
     private function writeCommand(string $command): void
     {
-        $this->bleDevice->writecommand(UUID::fromInt(0x2B11), $command);
+        $this->bleDevice->writeCommand(UUID::fromInt(0x2B11), $command);
+    }
+
+    public function printInfo()
+    {
+        $status = $this->getStatus();
+
+        echo "Standby  : ".$status->getStandby()."\n";
+        echo "CW       : ".$status->getCW()."\n";
+        echo "CCW      : ".$status->getCCW()."\n";
+        echo "OC       : ".$status->getOC()."\n";
+        echo "Warning  : ".$status->getWarning()."\n";
+        echo "Overload : ".$status->getOverload()."\n";
+        echo "USBSource: ".$status->getUSB()."\n";
+        echo "Streaming: ".$status->getStreaming()."\n\n";
+        echo "Output Current: ".$this->getOutputCurrent()." mA\n";
+        echo "Output Voltage: ".($this->getOutputVoltage() * 10)." mV\n";
+        echo "Time Left     : ".$this->getTimeLeft()." s\n";
     }
 }

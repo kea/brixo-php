@@ -7,7 +7,7 @@ use Kea\UUID;
 
 class BGLib
 {
-    private $debug = true;
+    private $debug = false;
     private $busy = false;
 
     private $eventHandler;
@@ -59,14 +59,14 @@ class BGLib
         return pack('C4', 0, 0, 6, 4);
     }
 
-    public function ble_cmd_attclient_read_by_handle($conn, $handle)
+    public function ble_cmd_attclient_read_by_handle($connection, $handle)
     {
-        throw new \RuntimeException('Not implemented');
+        return pack('C4Cv', 0, 3, 4, 4, $connection, $handle);
     }
 
-    public function ble_cmd_gap_set_scan_parameters($scan_interval, $scan_window, $active)
+    public function ble_cmd_gap_set_scan_parameters($scanInterval, $scanWindow, $active)
     {
-        return pack('C4vvC', 0, 5, 6, 7, $scan_interval, $scan_window, $active);
+        return pack('C4vvC', 0, 5, 6, 7, $scanInterval, $scanWindow, $active);
     }
 
     public function ble_cmd_gap_discover($mode)
@@ -128,6 +128,11 @@ class BGLib
     public function ble_cmd_attclient_find_information($connection, $handleStart, $handleEnd)
     {
         return pack('C4Cvv', 0, 5, 4, 3, $connection, $handleStart, $handleEnd);
+    }
+
+    public function ble_cmd_attclient_write_command($connection, $attHandle, $data)
+    {
+        return pack('C4CvC', 0, 4 + strlen($data), 4, 6, $connection, $attHandle, strlen($data)).$data;
     }
 
     /**

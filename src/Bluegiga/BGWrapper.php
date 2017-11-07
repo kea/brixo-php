@@ -11,6 +11,7 @@ class BGWrapper
     private $ble;
 
     const uuid_service = [0x28, 0x00];
+    const uuid_name = [0x2A, 0x00];
 
     /**
      * BGWrapper constructor.
@@ -66,7 +67,6 @@ class BGWrapper
                 }
             }
         );
-        echo "Scanning...\n";
         $this->startScan();
         $this->ble->checkActivity($this->serial, $duration * 1000000);
         $this->stopScan();
@@ -75,7 +75,7 @@ class BGWrapper
         return $results;
     }
 
-    public function connect(Peripheral $peripheral)
+    public function connect(Peripheral $peripheral): bool
     {
         # Connection intervals have units of 1.25ms
         $this->ble->sendCommand(
@@ -83,25 +83,25 @@ class BGWrapper
             $this->ble->ble_cmd_gap_connect_direct($peripheral->getSender(), $peripheral->getAType(), 30, 60, 0x100, 0)
         );
 
-        $result = [];
+        $connected = false;
 
         $this->ble->getEventHandler()->add(
             'ble_evt_connection_status',
-            function ($args) use (&$result) {
+            function ($args) use ($peripheral, &$connected) {
                 if (($args['flags'] & 0x05) === 0x05) {
-                    echo 'Connected to: '.$args['address']->getReadable()."\n";
-                    echo 'Interval: '.($args['conn_interval'] / 1.25)."ms\n";
-                    $result[] = $args['connection'];
+                    $peripheral->setConnection($args['connection']);
+                    $peripheral->setInterval($args['conn_interval']);
+                    $connected = true;
                 }
             }
         );
 
-        while (count($result) === 0) {
+        while (!$connected) {
             $this->ble->checkActivity($this->serial);
         }
         $this->ble->getEventHandler()->remove('ble_evt_connection_status');
 
-        return $result[0];
+        return $connected;
     }
 
     public function discoverServiceGroups($connection)
@@ -191,54 +191,54 @@ class BGWrapper
     public function read($conn, $handle)
     {
         $this->ble->sendCommand($this->serial, $this->ble->ble_cmd_attclient_read_by_handle($conn, $handle));
-        $result = [];
-        $payload = [];
-        $fail = [];
+        $result = 0;
+        $payload = false;
+        $fail = false;
 
-        $this->ble->ble_rsp_attclient_read_by_handle->add(
+        $this->ble->getEventHandler()->add(
+            'ble_rsp_attclient_read_by_handle',
             function ($args) use (&$result, $conn) {
                 if ($args['connection'] == $conn) {
-                    $result[] = $args['result'];
+                    $result = $args['result'];
                 }
             }
         );
-        $this->ble->ble_evt_attclient_attribute_value->add(
+        $this->ble->getEventHandler()->add(
+            'ble_evt_attclient_attribute_value',
             function ($args) use (&$payload, $conn) {
                 if ($args['connection'] == $conn) {
-                    $payload[] = $args['value'];
+                    $payload = $args['value'];
                 }
             }
         );
-        $this->ble->ble_evt_attclient_procedure_completed->add(
+        $this->ble->getEventHandler()->add(
+            'ble_evt_attclient_procedure_completed',
             function ($args) use (&$fail, $conn) {
                 if ($args['connection'] == $conn) {
-                    $fail[] = 0;
+                    $fail = true;
                 }
             }
         );
-        while (true) {
+        while (!$payload || !$fail) {
             $this->ble->checkActivity($this->serial);
-            if (count($result) && $result[0]) {
-                #There was a read error
+            if ($result != 0) {
+                $fail = true;
+            }
+            if ($fail) {
+
+                echo "Error reading handle: ".$handle;
+                var_dump($result);
                 break;
             }
-            if (count($fail)) {
-                #Command was processed correctly but we still failed
-                break;
-            }
-            if (count($payload)) {
+            if ($payload) {
                 break;
             }
         }
-        $this->ble->ble_rsp_attclient_read_by_handle->removeLastCallback();
-        $this->ble->ble_evt_attclient_attribute_value->removeLastCallback();
-        $this->ble->ble_evt_attclient_procedure_completed->removeLastCallback();
+        $this->ble->getEventHandler()->remove('ble_rsp_attclient_read_by_handle');
+        $this->ble->getEventHandler()->remove('ble_evt_attclient_attribute_value');
+        $this->ble->getEventHandler()->remove('ble_evt_attclient_procedure_completed');
 
-        if ($result[0] || count($fail)) {
-            return [];
-        }
-
-        return $payload[0];
+        return $fail ? '' : $payload;
     }
 
     public function write($connection, $handle, $value): void

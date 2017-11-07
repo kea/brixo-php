@@ -14,7 +14,7 @@ class Characteristic
 
     /**
      * @param $parent
-     * @param $handle ??? args returned by ble_evt_attclient_find_information_found
+     * @param $handle int args returned by ble_evt_attclient_find_information_found
      * @param $uuid
      */
     public function __construct(Peripheral $parent, $handle, UUID $uuid)
