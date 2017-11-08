@@ -16,7 +16,8 @@ function printMenu()
     echo "q: Quit\n";
 }
 
-$brixo = \Kea\Brixo\Brixo::fromPortName('/dev/tty.usbmodem1');
+$deviceName = '/dev/tty.usbmodem1';
+$brixo = \Kea\Brixo\Brixo::fromPortName($deviceName);
 
 $results = $brixo->scan(3);
 if (count($results) === 0) {
