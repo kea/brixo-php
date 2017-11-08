@@ -135,14 +135,14 @@ class BrixoDevice
     {
         $status = $this->getStatus();
 
-        echo "Standby  : ".$status->getStandby()."\n";
-        echo "CW       : ".$status->getCW()."\n";
-        echo "CCW      : ".$status->getCCW()."\n";
-        echo "OC       : ".$status->getOC()."\n";
-        echo "Warning  : ".$status->getWarning()."\n";
-        echo "Overload : ".$status->getOverload()."\n";
-        echo "USBSource: ".$status->getUSB()."\n";
-        echo "Streaming: ".$status->getStreaming()."\n\n";
+        echo "Standby  : ".($status->getStandby() ? '√' : 'x')."\n";
+        echo "CW       : ".($status->getCW() ? '√' : 'x')."\n";
+        echo "CCW      : ".($status->getCCW() ? '√' : 'x')."\n";
+        echo "OC       : ".($status->getOC() ? '√' : 'x')."\n";
+        echo "Warning  : ".($status->getWarning() ? '√' : 'x')."\n";
+        echo "Overload : ".($status->getOverload() ? '√' : 'x')."\n";
+        echo "USBSource: ".($status->getUSB() ? '√' : 'x')."\n";
+        echo "Streaming: ".($status->getStreaming() ? '√' : 'x')."\n\n";
         echo "Output Current: ".$this->getOutputCurrent()." mA\n";
         echo "Output Voltage: ".($this->getOutputVoltage() * 10)." mV\n";
         echo "Time Left     : ".$this->getTimeLeft()." s\n";
