@@ -4,42 +4,46 @@ ini_set("display_errors", "1");
 error_reporting(E_ALL);
 
 include_once __DIR__.'/../vendor/autoload.php';
+include_once __DIR__.'/Console.php';
 
 function printMenu()
 {
-    echo "0: Set direction\n";
-    echo "1: Standby\n";
-    echo "2: Set power\n";
-    echo "3: Shutdown battery\n";
-    echo "4: Set timer\n";
-    echo "5: Status information\n";
-    echo "q: Quit\n";
+    Console::print("0: ", 'green'); Console::println("Set direction", 'white');
+    Console::print("1: ", 'green'); Console::println("Standby", 'white');
+    Console::print("2: ", 'green'); Console::println("Set power", 'white');
+    Console::print("3: ", 'green'); Console::println("Shutdown battery", 'white');
+    Console::print("4: ", 'green'); Console::println("Set timer", 'white');
+    Console::print("5: ", 'green'); Console::println("Status information", 'white');
+    Console::print("q: ", 'green'); Console::println("Quit", 'white');
 }
 
 $deviceName = '/dev/tty.usbmodem1';
 $brixo = \Kea\Brixo\Brixo::fromPortName($deviceName);
 
+Console::println("Scanning...", 'cyan');
 $results = $brixo->scan(3);
 if (count($results) === 0) {
     echo "No devices found\n";
     exit;
 }
 
-echo "Found ".count($results)." device(s):\n";
+Console::println("\nFound ".count($results)." device(s):", 'cyan');
 foreach ($results as $index => $result) {
-    echo '['.$index.'] '.$result->getMac()."\n";
+    Console::print('['.$index.'] ', 'green');
+    Console::println($result->getMac(), 'white');
 }
 
-echo 'Choose device: ';
+Console::print('Choose device: ', 'yellow');
 $choice = (int)trim(fgets(STDIN));
 
 $device = $brixo->connect($results[$choice]);
-echo 'Device name: '.$device->getName()."\n";
+Console::print('Device name: ', 'cyan');
+Console::println($device->getName(), 'red');
 $beep = 1;
 
-while ($choice != 'q') {
+while ($choice !== 'q') {
     printMenu();
-    echo 'Input Command: ';
+    Console::print('Input Command: ', 'yellow');
     $choice = strtolower(trim(fgets(STDIN)));
     switch ($choice) {
         case 'q':
@@ -67,6 +71,19 @@ while ($choice != 'q') {
             $device->setTimer((int)$timerValue);
             break;
         case '5':
-            $device->printInfo();
+            $status = $device->getStatus();
+            Console::printStatus("Standby  : ", $status->getStandby());
+            Console::printStatus("CW       : ", $status->getCW());
+            Console::printStatus("CCW      : ", $status->getCCW());
+            Console::printStatus("OC       : ", $status->getOC());
+            Console::printStatus("Warning  : ", $status->getWarning());
+            Console::printStatus("Overload : ", $status->getOverload());
+            Console::printStatus("USBSource: ", $status->getUSB());
+            Console::printStatus("Streaming: ", $status->getStreaming());
+            Console::printInfo("Output Current: ", $device->getOutputCurrent()." mA");
+            Console::printInfo("Output Voltage: ", ($device->getOutputVoltage() * 10)." mV");
+            Console::printInfo("Time Left     : ", $device->getTimeLeft()." s");
+
+
     }
 }

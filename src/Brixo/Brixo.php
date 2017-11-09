@@ -34,7 +34,6 @@ class Brixo
      */
     public function scan($timeout)
     {
-        echo "Scanning...";
         $this->deviceList = $this->bgWrapper->scan($timeout);
 
         return $this->deviceList;
