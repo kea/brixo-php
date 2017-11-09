@@ -29,4 +29,4 @@ Play
 $ php src/test.php
 ```
 
-[![asciicast](https://asciinema.org/a/BKOv691P9iaAtWBZHdiQoSyvc.png)](https://asciinema.org/a/BKOv691P9iaAtWBZHdiQoSyvc)
+[![asciicast](https://asciinema.org/a/A59Wr3EE85boFHpDZAg6LWrO2.png)](https://asciinema.org/a/A59Wr3EE85boFHpDZAg6LWrO2)
